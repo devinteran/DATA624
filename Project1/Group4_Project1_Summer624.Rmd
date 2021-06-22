@@ -7,24 +7,118 @@ output: word_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(xlsx)
+library(dplyr)
+library(fpp)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
 ```
 
-## R Markdown
+## Getting Data
+First we will read the data into a dataframe from the xls.
+```{r get-data}
+data <- read.xlsx2("/Users/devinteran/MSinDS/DATA624/DATA624/Project1/Data Set for Class.xls",sheetIndex = 1,colClasses = c('character','character','double','double','double','double','double'),stringsAsFactors=FALSE)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+S01 <- data %>% filter(group == 'S01' & Var01 != 'NA') %>% select (SeriesInd,Var01,Var02) 
+S02 <- data %>% filter(group == 'S02' & Var02 != 'NA') %>% select (SeriesInd,Var02,Var03) 
+S03 <- data %>% filter(group == 'S03' & Var05 != 'NA') %>% select (SeriesInd,Var05,Var07) 
+S04 <- data %>% filter(group == 'S04' & Var01 != 'NA') %>% select (SeriesInd,Var01,Var02) 
+S05 <- data %>% filter(group == 'S05' & Var02 != 'NA') %>% select (SeriesInd,Var02,Var03) 
+S06 <- data %>% filter(group == 'S06' & Var05 != 'NA') %>% select (SeriesInd,Var05,Var07) 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+## Exploratory Data Analysis
+Our data represents 5 different groups where we are going to forecast data within each of these groups using specified variables from coluns 2-6.  We have 1622 data points within each group and will be forecasting 140 series points.  Here is a description of each columns:
 
-You can also embed plots, for example:
+**SeriesInd** - this provides the time element in our data.  It represents a frequency of 1.  
+**group** - this will be what we are forecasted/our output prediction.  
+**Var01, Var02, Var03, Var05, Var07** - these are to be used in different combinations in order to forecast 140 series data within each group
+```{r view-data}
+data %>%
+  kbl() %>%
+  kable_minimal()
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Missing Data
+There are 26 rows within our data we will use for analysis where one or more **Var** values is NA.  
+```{r missing data}
+library(visdat)
+data_analysis <- data %>% filter(SeriesInd < 43021)
+vis_dat(data_analysis %>% select(-SeriesInd))
+```
+
+```{r missing-data-point}
+data_analysis[is.na(data_analysis$Var01)|is.na(data_analysis$Var02)|is.na(data_analysis$Var03)|is.na(data_analysis$Var05)|is.na(data_analysis$Var07),]
+
+```
+
+We will only delete the line of data in the group if the variable is being using for predictions. From here each **group** will be stored into a separate variable.
+```{r separate-variables}
+S01 <- data %>% filter(group == 'S01' & Var01 != 'NA' & Var02 != 'NA') %>% select (SeriesInd,Var01,Var02) 
+S02 <- data %>% filter(group == 'S02' & Var02 != 'NA' & Var03 != 'NA') %>% select (SeriesInd,Var02,Var03) 
+S03 <- data %>% filter(group == 'S03' & Var05 != 'NA' & Var07 != 'NA') %>% select (SeriesInd,Var05,Var07) 
+S04 <- data %>% filter(group == 'S04' & Var01 != 'NA' & Var02 != 'NA') %>% select (SeriesInd,Var01,Var02) 
+S05 <- data %>% filter(group == 'S05' & Var02 != 'NA' & Var03 != 'NA') %>% select (SeriesInd,Var02,Var03) 
+S06 <- data %>% filter(group == 'S06' & Var05 != 'NA' & Var07 != 'NA') %>% select (SeriesInd,Var05,Var07) 
+
+```
+
+## Visualize Data
+```{r correlation}
+library(corrplot)
+S01_sub <- S01 %>% select(-SeriesInd)
+S01_relationships <- ggplot(S01, aes(x=Var01, y=Var02)) +
+  geom_point() + 
+  ggtitle(paste("S01: Var1 vs 2 with Corr: ",round(cor(S01_sub)[1,2],4)))
+
+S02_sub <- S02 %>% select(-SeriesInd)
+S02_relationships <- ggplot(S02, aes(x=Var02, y=Var03)) +
+  geom_point() + 
+  ggtitle(paste("S02: Var2 vs 3 with Corr: ",round(cor(S02_sub)[1,2],4)))
+
+S03_sub <- S03 %>% select(-SeriesInd)
+S03_relationships <- ggplot(S03, aes(x=Var05, y=Var07)) +
+  geom_point() + 
+  ggtitle(paste("S03: Var5 vs 7 with Corr: ",round(cor(S03_sub)[1,2],4)))
+
+S04_sub <- S04 %>% select(-SeriesInd)
+S04_relationships <- ggplot(S04, aes(x=Var01, y=Var02)) +
+  geom_point() + 
+  ggtitle(paste("S04: Var1 vs 2 with Corr: ",round(cor(S04_sub)[1,2],4)))
+
+S05_sub <- S05 %>% select(-SeriesInd)
+S05_relationships <- ggplot(S05, aes(x=Var02, y=Var03)) +
+  geom_point() + 
+  ggtitle(paste("S05: Var2 vs 3 with Corr: ",round(cor(S05_sub)[1,2],4)))
+
+S06_sub <- S06 %>% select(-SeriesInd)
+S06_relationships <- ggplot(S06, aes(x=Var05, y=Var07)) +
+  geom_point() + 
+  ggtitle(paste("S06: Var5 vs 7 with Corr: ",round(cor(S06_sub)[1,2],4)))
+
+
+grid.arrange(S01_relationships,S02_relationships,S03_relationships,
+             S04_relationships,S05_relationships,S06_relationships,
+             nrow=3)
+
+```
+
+## Working with Time Series
+From here we will convert the data into timeseries objects with a frequency of 1.
+```{r create-time-series}
+S01_ts <- ts(S01,start=40669,end=43021, frequency=1)
+S02_ts <- ts(S02,start=40669,end=43021, frequency=1)
+S03_ts <- ts(S03,start=40669,end=43021, frequency=1)
+S04_ts <- ts(S04,start=40669,end=43021, frequency=1)
+S05_ts <- ts(S05,start=40669,end=43021, frequency=1)
+S06_ts <- ts(S06,start=40669,end=43021, frequency=1)
+```
+
+## Autoplot
+```{r autoplot}
+autoplot(S01_ts)
+
+```

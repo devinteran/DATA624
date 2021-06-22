@@ -1,0 +1,209 @@
+---
+title: "Data624 HA Chapter7 Exercises"
+author: "Devin Teran"
+date: "6/12/2021"
+output: word_document
+---
+
+#Libraries
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(fpp)
+library(ggfortify)
+library(dplyr)
+library(tidyr)
+```
+
+## Exercise 7.1
+Consider the pigs series — the number of pigs slaughtered in Victoria each month.    
+  
+*(1)* Use the **ses()** function in R to find the optimal values of $\alpha$ and $l_{0}$, and generate forecasts for the next four months.  
+```{r ex-7.1-1,warnings = FALSE}
+fc <- ses(pigs,h=4)
+
+fc$model
+
+```
+We can see the optimal alpha is 0.2971 and optimal l_0 is 77270.0561.
+
+```{r ex-7.1-2,warnings = FALSE}
+autoplot(fc) +
+  ggtitle("Numbers Pigs Slaughtered in Victoria Each Month") + 
+  xlab("Month") + 
+  ylab("Pigs")
+
+```
+*(2)* Compute a 95% prediction interval for the first forecast using $\hat{y} +/- 1.96s$ where *s* is the standard deviation of the residuals. Compare your interval with the interval produced by R.  
+```{r hat}
+y_hat <- fc$mean[1]
+s <- sd(fc$residuals)
+lower <- y_hat - 1.96*s
+upper <- y_hat + 1.96*s
+
+paste("The lower interval is", lower)
+paste("The upper interval is", upper)
+
+
+R_upper <- fc$upper[1,2]
+R_lower <- fc$lower[1,2]
+
+paste("From R we see their lower interval is", R_lower)
+paste("From R we see their upper interval is", R_upper)
+```
+
+Here we manually calculated the confidence interval to be roughly (78679.967,118952.845) compared to interval from R (78611.968,119020.844).  They are very close to one another.
+
+## Exercise 7.2
+Write your own function to implement simple exponential smoothing. The function should take arguments y (the time series), alpha (the smoothing parameter $\alpha$) and level (the initial level l~0~). It should return the forecast of the next observation in the series. Does it give the same forecast as **ses()**?
+```{r ex-7.2-first-eqn}
+simple_exp_smooth <- function(y,alpha,level){
+  n <- length(y)
+  current_forecast <- level
+  
+  for (i in 1:n){
+    
+    current_forecast <- ((alpha*y[i]) + ((1-alpha)*current_forecast))
+
+  }
+  
+  return(current_forecast)
+}
+simple_exp_smooth(pigs,0.2971,77270.0561)
+
+```
+
+Yes, we can see that the value from my equation matches the same forecast from **ses()**.  They both forecast 98816.45.  
+  
+## Exercise 7.3
+Modify your function from the previous exercise to return the sum of squared errors rather than the forecast of the next observation. Then use the *optim()* function to find the optimal values of $\alpha$ and l~0~).  Do you get the same values as the *ses()* function?
+```{r ex-7.3}
+sum_squared_errors <- function(y,alpha,level){
+  n <- length(y)
+  SSE <- 0
+  current_forecast <- level
+  
+  for (i in 1:n){
+    #calculate the error which is the forecast minus the actual times series value
+    error <- (current_forecast - y[i])
+    
+    #running total of the squared error so far
+    SSE <- SSE + error^2
+    
+    current_forecast <- ((alpha*y[i]) + ((1-alpha)*current_forecast))
+
+  }
+  return(SSE)
+}
+sum_squared_errors(pigs,0.2971,77270.0561)
+ 
+##
+##
+##
+####
+##
+####
+##
+####
+##
+####
+##
+##
+####
+##
+##
+##
+```
+
+## Exercise 3.1
+The UC Irvine Machine Learning Repository contains a data set related to glass identification. The data consist of 214 glass samples labeled as one of seven class categories. There are nine predictors, including the refractive index and percentages of eight elements: Na, Mg, Al, Si, K, Ca, Ba, and Fe.
+The data can be accessed via:
+```{r ex-3.1-setup}
+library(mlbench)
+library(corrplot)
+data(Glass)
+str(Glass)
+
+```
+
+(a) Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
+
+```{r ex-3.1-visualize}
+Glass_predictors <- Glass %>% select(-Type)
+corrplot(cor(Glass_predictors), type="upper")
+```
+(b) Do there appear to be any outliers in the data? Are any predictors skewed?
+```{r outliers}
+par(mfrow=c(2,1))
+Glass %>% 
+  dplyr::select(-Ca,-Na,-Si,-Type) %>% 
+  pivot_longer(everything(), names_to = 'Predictor', values_to='Values') %>% 
+  ggplot(aes(x = reorder(Predictor,-Values), y = Values)) +
+  geom_boxplot() + 
+  coord_flip() 
+
+Glass %>% 
+  dplyr::select(Ca,Na,Si) %>% 
+  pivot_longer(everything(), names_to = 'Predictor', values_to='Values') %>% 
+  ggplot(aes(x = reorder(Predictor,-Values), y = Values)) +
+  geom_boxplot() + 
+  coord_flip()
+
+
+```
+```{r hist-skew, warning=FALSE}
+library(purrr)
+Glass %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+(c) Are there any relevant transformations of one or more predictors that might improve the classification model?
+
+
+## Exercise 3.2
+The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmen- tal conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes.  
+  
+The data can be loaded via:
+```{r ex-3.2-get-data}
+library(mlbench)
+data(Soybean)
+
+```
+
+(a) Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
+```{r categorical-count}
+library(purrr)
+Soybean %>%
+  count(Class,sort=TRUE) 
+
+```
+
+```{r categorical-count}
+library(purrr)
+Soybean %>%
+  gather(variable,level) %>% 
+  ggplot(aes(level)) +
+  facet_wrap(~ variable, scales = "free") +
+  geom_bar()
+
+Soybean %>%
+  gather(variable, level) %>%
+  ggplot(aes(x = level)) +
+  geom_bar(fill = 'steelblue') + 
+  xlab("Frequency of Level Occurrence") +
+  facet_wrap(~variable, scales = 'free')
+```
+
+(b) Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?
+```{r }
+library(visdat)
+vis_dat(Soybean %>% select(-Class))
+```
+ 
+(c) Develop a strategy for handling missing data, either by eliminating predictors or imputation.
+```{r }
+
+```
