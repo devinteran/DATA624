@@ -2,7 +2,9 @@
 title: "Group4_Project1_Summer624"
 author: "Devin Teran"
 date: "6/21/2021"
-output: word_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -28,7 +30,7 @@ Our data represents 5 different groups where we are going to forecast data withi
 **group** - this will be what we are forecasted/our output prediction.  
 **Var01, Var02, Var03, Var05, Var07** - these are to be used in different combinations in order to forecast 140 series data within each group
 ```{r view-data}
-data %>%
+data[1:15,] %>%
   kbl() %>%
   kable_minimal()
 
@@ -39,7 +41,7 @@ data %>%
 S01 <- data %>% 
   mutate(date = as.Date(SeriesInd, origin = '1898-08-30')) %>%
   filter(SeriesInd < 43022 & group == 'S01') %>% 
-  select (date,Var01,Var02)
+  select (SeriesInd,date,Var01,Var02)
 
 ```
 
@@ -147,54 +149,80 @@ S01_clean$Var02_diff %>% ur.kpss() %>% summary()
 
 ## Splitting Data into Test & Training
 ```{r split-test-train}
-sample_index = sort(sample(nrow(S01_ts_Var01_diff), nrow(S01_ts_Var01_diff)*.80))
-train <- S01_clean[sample_index,]
-test  <- S01_clean[-sample_index,]
+#sample_index = sort(sample(nrow(S01_clean), nrow(S01_clean)*.80))
+#train <- S01_clean[sample_index,]
+#test  <- S01_clean[-sample_index,]
+train_break <- floor(nrow(S01_clean)*0.8)
 
 ```
 ## Time Series Plots
 
 ### Auto Arima - Variable 01 Differentiated
 ```{r auto-arima-var-01}
-S01_ts_Var01 <- ts(select(train,Var01_diff))
+S01_ts_Var01 <- ts(select(train,Var01)[1:train_break,])
 
-fit_var01_auto <- auto.arima(S01_ts_Var01_diff)
-fit_var01_auto
+fit_var01_auto <- auto.arima(S01_ts_Var01)
+summary(fit_var01_auto)
 ```
 
-```{r auto-arima-residuals-var01}
-checkresiduals(fit_var01_auto)
-```
 ### ETS - Variable 01 Differentiated
 ```{r ets-var01}
-fit_var01_ets <- ets(S01_ts_Var01_diff)
-fit_var01_ets
+fit_var01_ets <- ets(S01_ts_Var01)
+summary(fit_var01_ets)
 ```
 
-```{r ets-residuals-var01}
-checkresiduals(fit_var01_ets)
+### Forecast on Test Data - Variable 01
+```{r forecast-variable01}
+test_var01 <- ts(select(test,Var01),frequency=1)
+
+forecast_auto_var01 <- fit_var01_auto %>% forecast(nrow(S01_clean) - train_break)
+accuracy(forecast_auto_var01,S01_clean[1298:nrow(S01_clean),c('Var01')])
+
+forecast_ets_var01 <- fit_var01_ets %>% forecast(nrow(S01_clean) - train_break)
+accuracy(forecast_ets_var01,S01_clean[1298:nrow(S01_clean),c('Var01')])
 ```
+
 ### Auto Arima - Variable 02 Differentiated
 ```{r  auto-arima-var-02}
-S01_ts_Var02_diff <- ts(select(train,Var02_diff))
+S01_ts_Var02 <- ts(select(train,Var02))
 
-fit_var02_auto <- auto.arima(S01_ts_Var02_diff)
-fit_var02_auto
-```
-
-```{r var01-residuals}
-checkresiduals(fit_var02_auto)
+fit_var02_auto <- auto.arima(S01_ts_Var02)
+summary(fit_var02_auto)
 ```
 
 ### ETS - Variable 02 Differentiated
 ```{r ets-var02}
-fit_var02_ets <- ets(S01_ts_Var02_diff)
-fit_var02_ets
+fit_var02_ets <- ets(S01_ts_Var02)
+summary(fit_var02_ets)
 ```
 
-```{r ets-residuals-var02}
-checkresiduals(fit_var02_ets)
+### Forecast on Test Data - Variable 02
+```{r forecast-variable02}
+test_var02 <- ts(select(test,Var02),frequency=1)
+
+forecast_auto_var02 <- fit_var02_auto %>% forecast(nrow(S01_clean) - train_break)
+accuracy(forecast_auto_var02,S01_clean[1298:nrow(S01_clean),c('Var01')])
+
+forecast_ets_var02 <- fit_var02_ets %>% forecast(nrow(S01_clean) - train_break)
+accuracy(forecast_ets_var02,S01_clean[1298:nrow(S01_clean),c('Var01')])
 ```
 
-## Forecasting Data
-For **Variable01** & **Variable02** we can see that the *auto.arima* models are more accurate since the AIC values are lower than the ETS models.
+## Residuals of Models
+```{r residuals_var01}
+checkresiduals(fit_var01_auto)
+```
+
+```{r residuals_var02}
+checkresiduals(fit_var02_auto)
+```
+## Forecasting out 140 Variables
+Now we will forecast out 140 periods using our selected models for Variable 01 and 02.
+```{r var01-forecast}
+final_forecast_auto_var01 <- fit_var01_auto %>% forecast(140)
+autoplot(final_forecast_auto_var01)
+```
+
+```{r var02-forecast}
+final_forecast_auto_var02 <- fit_var02_auto %>% forecast(140)
+autoplot(final_forecast_auto_var02)
+```
