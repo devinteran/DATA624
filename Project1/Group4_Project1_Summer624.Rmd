@@ -13,22 +13,14 @@ library(fpp)
 library(kableExtra)
 library(ggplot2)
 library(gridExtra)
+library(urca)
 ```
 
 ## Getting Data
 First we will read the data into a dataframe from the xls.
 ```{r get-data}
-data <- read.xlsx2("/Users/devinteran/MSinDS/DATA624/DATA624/Project1/Data Set for Class.xls",sheetIndex = 1,colClasses = c('character','character','double','double','double','double','double'),stringsAsFactors=FALSE)
-
-S01 <- data %>% filter(group == 'S01' & Var01 != 'NA') %>% select (SeriesInd,Var01,Var02) 
-S02 <- data %>% filter(group == 'S02' & Var02 != 'NA') %>% select (SeriesInd,Var02,Var03) 
-S03 <- data %>% filter(group == 'S03' & Var05 != 'NA') %>% select (SeriesInd,Var05,Var07) 
-S04 <- data %>% filter(group == 'S04' & Var01 != 'NA') %>% select (SeriesInd,Var01,Var02) 
-S05 <- data %>% filter(group == 'S05' & Var02 != 'NA') %>% select (SeriesInd,Var02,Var03) 
-S06 <- data %>% filter(group == 'S06' & Var05 != 'NA') %>% select (SeriesInd,Var05,Var07) 
-
+data <- read.xlsx2("/Users/devinteran/MSinDS/DATA624/DATA624/Project1/Data Set for Class.xls",sheetIndex = 1,colClasses = c('integer','character','double','double','double','double','double'),stringsAsFactors=FALSE)
 ```
-
 ## Exploratory Data Analysis
 Our data represents 5 different groups where we are going to forecast data within each of these groups using specified variables from coluns 2-6.  We have 1622 data points within each group and will be forecasting 140 series points.  Here is a description of each columns:
 
@@ -42,83 +34,167 @@ data %>%
 
 ```
 
+##Cleaning Data
+```{r clean-data}
+S01 <- data %>% 
+  mutate(date = as.Date(SeriesInd, origin = '1898-08-30')) %>%
+  filter(SeriesInd < 43022 & group == 'S01') %>% 
+  select (date,Var01,Var02)
+
+```
+
+```{r view-cleaned-data}
+S01 %>%
+  kbl() %>%
+  kable_minimal()
+
+```
+
 ## Missing Data
-There are 26 rows within our data we will use for analysis where one or more **Var** values is NA.  
+There are 2 rows within the group S01 that is missing a **Var01** value. 
 ```{r missing data}
 library(visdat)
-data_analysis <- data %>% filter(SeriesInd < 43021)
-vis_dat(data_analysis %>% select(-SeriesInd))
+vis_dat(S01)
 ```
 
-```{r missing-data-point}
-data_analysis[is.na(data_analysis$Var01)|is.na(data_analysis$Var02)|is.na(data_analysis$Var03)|is.na(data_analysis$Var05)|is.na(data_analysis$Var07),]
-
+```{r missing-data-points}
+S01[is.na(S01$Var01)|is.na(S01$Var02),]
 ```
 
-We will only delete the line of data in the group if the variable is being using for predictions. From here each **group** will be stored into a separate variable.
-```{r separate-variables}
-S01 <- data %>% filter(group == 'S01' & Var01 != 'NA' & Var02 != 'NA') %>% select (SeriesInd,Var01,Var02) 
-S02 <- data %>% filter(group == 'S02' & Var02 != 'NA' & Var03 != 'NA') %>% select (SeriesInd,Var02,Var03) 
-S03 <- data %>% filter(group == 'S03' & Var05 != 'NA' & Var07 != 'NA') %>% select (SeriesInd,Var05,Var07) 
-S04 <- data %>% filter(group == 'S04' & Var01 != 'NA' & Var02 != 'NA') %>% select (SeriesInd,Var01,Var02) 
-S05 <- data %>% filter(group == 'S05' & Var02 != 'NA' & Var03 != 'NA') %>% select (SeriesInd,Var02,Var03) 
-S06 <- data %>% filter(group == 'S06' & Var05 != 'NA' & Var07 != 'NA') %>% select (SeriesInd,Var05,Var07) 
+```{r fix-missing-data}
+prev_value <- S01[c(1536),'Var01']
+S01_clean <- S01
+S01_clean[is.na(S01_clean$Var01)|is.na(S01_clean$Var02),]$Var01 <- prev_value
 
 ```
 
 ## Visualize Data
 ```{r correlation}
-library(corrplot)
-S01_sub <- S01 %>% select(-SeriesInd)
-S01_relationships <- ggplot(S01, aes(x=Var01, y=Var02)) +
-  geom_point() + 
-  ggtitle(paste("S01: Var1 vs 2 with Corr: ",round(cor(S01_sub)[1,2],4)))
+require(scales)
+S01_Var01 <- ggplot(S01_clean, aes(x=Var01)) +
+  geom_histogram(bins=50,color='black',fill="#7fc97f") + 
+  ggtitle("Group S01 Data") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text.x = element_text(angle = 45))
+S01_Var01_boxplot <- ggplot(S01_clean, aes(x=Var01)) +
+  geom_boxplot(color='black',fill="#7fc97f") + 
+  ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(axis.text.x = element_text(angle = 45))
+S01_Var02 <- ggplot(S01_clean, aes(x=Var02)) +
+  geom_histogram(bins=30,color='black',fill='#fdc086') + 
+  scale_x_continuous(labels = comma) + 
+  theme(axis.text.x = element_text(angle = 45))
+S01_Var02_boxplot <- ggplot(S01_clean, aes(x=Var02)) +
+  geom_boxplot(color='black',fill="#fdc086") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  scale_x_continuous(labels = comma) + 
+  theme(axis.text.x = element_text(angle = 45))
+grid.arrange(S01_Var01,S01_Var01_boxplot,S01_Var02,S01_Var02_boxplot,nrow=2,widths=2:1)
 
-S02_sub <- S02 %>% select(-SeriesInd)
-S02_relationships <- ggplot(S02, aes(x=Var02, y=Var03)) +
-  geom_point() + 
-  ggtitle(paste("S02: Var2 vs 3 with Corr: ",round(cor(S02_sub)[1,2],4)))
+```
+* Variable 1 data has multiple peaks  
+* Variable 02 is right skewed with many outliers  
 
-S03_sub <- S03 %>% select(-SeriesInd)
-S03_relationships <- ggplot(S03, aes(x=Var05, y=Var07)) +
-  geom_point() + 
-  ggtitle(paste("S03: Var5 vs 7 with Corr: ",round(cor(S03_sub)[1,2],4)))
+##Time, ACF and PACF Plots  
+### Variable 01
+```{r visualize-var01}
+ggtsdisplay(S01_clean$Var01)
+```
+* Variable 01 data has a clear trend and is non-stationary data
+* The ACF plot shows an initial large autocorrelation value that gradually decreases as the lag increases, which indicates a trend  
+* The PACF shows a single significant value for lag 1.  This means the first lag explains all of the correlation that exists in the higher lags. This implies a consistent trend
 
-S04_sub <- S04 %>% select(-SeriesInd)
-S04_relationships <- ggplot(S04, aes(x=Var01, y=Var02)) +
-  geom_point() + 
-  ggtitle(paste("S04: Var1 vs 2 with Corr: ",round(cor(S04_sub)[1,2],4)))
+### Differencing Variable 01 Data
+From our previous plots we can see a clear trend.  Let's run a Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test in order to confirm this.  This test assumes that *Variable 01 data is stationary* and we are looking to reject that statement.  In order to reject that statement, we need to see that our test-statistic is less than 0.463.
+```{r var01-kpss-test}
+S01_clean$Var01 %>% ur.kpss() %>% summary()
+```
 
-S05_sub <- S05 %>% select(-SeriesInd)
-S05_relationships <- ggplot(S05, aes(x=Var02, y=Var03)) +
-  geom_point() + 
-  ggtitle(paste("S05: Var2 vs 3 with Corr: ",round(cor(S05_sub)[1,2],4)))
+Here we see a test statistic of 16.0591 which is above 0.463 so we know we can reject the original statement that the *Variable 01 data is stationary*.  
 
-S06_sub <- S06 %>% select(-SeriesInd)
-S06_relationships <- ggplot(S06, aes(x=Var05, y=Var07)) +
-  geom_point() + 
-  ggtitle(paste("S06: Var5 vs 7 with Corr: ",round(cor(S06_sub)[1,2],4)))
+From our KPSS test we confirmed that Variable 01 data is non-stationary and we need to differentiate it in an attempt to make it stationary.  Here we are differentiating the data and running the KPSS test again.  We see that our test-statistic is much lower and we can accept the assumption that *Variable 01 data after being differentiated once is now stationary*.  
+```{r var01-differencing}
+Var01_diff <- c(0,S01_clean$Var01 %>% diff())
+S01_clean$Var01_diff <- Var01_diff
 
-
-grid.arrange(S01_relationships,S02_relationships,S03_relationships,
-             S04_relationships,S05_relationships,S06_relationships,
-             nrow=3)
+S01_clean$Var01_diff %>% ur.kpss() %>% summary()
 
 ```
 
-## Working with Time Series
-From here we will convert the data into timeseries objects with a frequency of 1.
-```{r create-time-series}
-S01_ts <- ts(S01,start=40669,end=43021, frequency=1)
-S02_ts <- ts(S02,start=40669,end=43021, frequency=1)
-S03_ts <- ts(S03,start=40669,end=43021, frequency=1)
-S04_ts <- ts(S04,start=40669,end=43021, frequency=1)
-S05_ts <- ts(S05,start=40669,end=43021, frequency=1)
-S06_ts <- ts(S06,start=40669,end=43021, frequency=1)
+### Variable 02
+```{r visualize-var02}
+ggtsdisplay(S01_clean$Var02)
+```
+* Variable 02 data is a little less clear but appears to have a trend and is non-stationary data
+* The ACF plot shows an initial large autocorrelation value that gradually decreases as the lag increases, which indicates a trend  
+* The PACF shows a significant value for lag 1.  There also appears to be some seasonality since autocorrelations increase slightly as the lag increases.    
+
+### Differencing Variable 02 Data
+Just like we did with Variable 01, we are running the KPSS test and looking to reject the statement *Variable 02 is stationary*.  To do this the KPSS test-statistic must be larger than 0.347, which it is.  We reject the statement that Variable 02 data is stationary, which matches our previous theory.    
+```{r var02-kpss-test}
+S01_clean$Var02 %>% ur.kpss() %>% summary()
 ```
 
-## Autoplot
-```{r autoplot}
-autoplot(S01_ts)
+The KPSS test helped us confirm that Variable 02 data is non-stationary and we need to differentiate it as well.  Here we are differentiating the data and running the KPSS test again.  We see that our test-statistic is much lower and we can accept the assumption that *Variable 02 data after being differentiated once is now stationary*.  
+```{r var02-differencing}
+Var02_diff <- c(0,S01_clean$Var02 %>% diff())
+S01_clean$Var02_diff <- Var02_diff
+
+S01_clean$Var02_diff %>% ur.kpss() %>% summary()
 
 ```
+
+## Splitting Data into Test & Training
+```{r split-test-train}
+sample_index = sort(sample(nrow(S01_ts_Var01_diff), nrow(S01_ts_Var01_diff)*.80))
+train <- S01_clean[sample_index,]
+test  <- S01_clean[-sample_index,]
+
+```
+## Time Series Plots
+
+### Auto Arima - Variable 01 Differentiated
+```{r auto-arima-var-01}
+S01_ts_Var01 <- ts(select(train,Var01_diff))
+
+fit_var01_auto <- auto.arima(S01_ts_Var01_diff)
+fit_var01_auto
+```
+
+```{r auto-arima-residuals-var01}
+checkresiduals(fit_var01_auto)
+```
+### ETS - Variable 01 Differentiated
+```{r ets-var01}
+fit_var01_ets <- ets(S01_ts_Var01_diff)
+fit_var01_ets
+```
+
+```{r ets-residuals-var01}
+checkresiduals(fit_var01_ets)
+```
+### Auto Arima - Variable 02 Differentiated
+```{r  auto-arima-var-02}
+S01_ts_Var02_diff <- ts(select(train,Var02_diff))
+
+fit_var02_auto <- auto.arima(S01_ts_Var02_diff)
+fit_var02_auto
+```
+
+```{r var01-residuals}
+checkresiduals(fit_var02_auto)
+```
+
+### ETS - Variable 02 Differentiated
+```{r ets-var02}
+fit_var02_ets <- ets(S01_ts_Var02_diff)
+fit_var02_ets
+```
+
+```{r ets-residuals-var02}
+checkresiduals(fit_var02_ets)
+```
+
+## Forecasting Data
+For **Variable01** & **Variable02** we can see that the *auto.arima* models are more accurate since the AIC values are lower than the ETS models.
