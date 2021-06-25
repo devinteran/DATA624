@@ -36,7 +36,7 @@ data[1:15,] %>%
 
 ```
 
-##Cleaning Data
+## Cleaning Data
 ```{r clean-data}
 S01 <- data %>% 
   mutate(date = as.Date(SeriesInd, origin = '1898-08-30')) %>%
@@ -46,7 +46,7 @@ S01 <- data %>%
 ```
 
 ```{r view-cleaned-data}
-S01 %>%
+S01[1:15,] %>%
   kbl() %>%
   kable_minimal()
 
@@ -95,20 +95,37 @@ S01_Var02_boxplot <- ggplot(S01_clean, aes(x=Var02)) +
 grid.arrange(S01_Var01,S01_Var01_boxplot,S01_Var02,S01_Var02_boxplot,nrow=2,widths=2:1)
 
 ```
-* Variable 1 data has multiple peaks  
-* Variable 02 is right skewed with many outliers  
+  
+* Variable 1 data has multiple peaks    
+* Variable 02 is right skewed with many outliers    
 
-##Time, ACF and PACF Plots  
-### Variable 01
+## Decomposition - Trend, Seasonal, Error
+```{r decomposition-Var01}
+t <- ts(S01$Var01, start = 2010, end = 2014, frequency = 365)
+t %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Classical multiplicative decomposition of S01 data - Variable 01")
+```
+```{r decomposition-Var02}
+t <- ts(S01$Var02, start = 2010, end = 2014, frequency = 365)
+t %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Classical multiplicative decomposition of S01 data - Variable 02")
+```
+
+
+## Time, ACF and PACF Plots    
+### Variable 01  
 ```{r visualize-var01}
 ggtsdisplay(S01_clean$Var01)
 ```
+  
 * Variable 01 data has a clear trend and is non-stationary data
 * The ACF plot shows an initial large autocorrelation value that gradually decreases as the lag increases, which indicates a trend  
 * The PACF shows a single significant value for lag 1.  This means the first lag explains all of the correlation that exists in the higher lags. This implies a consistent trend
 
 ### Differencing Variable 01 Data
-From our previous plots we can see a clear trend.  Let's run a Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test in order to confirm this.  This test assumes that *Variable 01 data is stationary* and we are looking to reject that statement.  In order to reject that statement, we need to see that our test-statistic is less than 0.463.
+From our previous plots we can see a clear trend.  Let's run a Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test in order to confirm this.  This test assumes that *Variable 01 data is stationary* and we are looking to reject that statement.  In order to reject that statement, we need to see that our test-statistic is less than 0.463.  
 ```{r var01-kpss-test}
 S01_clean$Var01 %>% ur.kpss() %>% summary()
 ```
@@ -128,12 +145,13 @@ S01_clean$Var01_diff %>% ur.kpss() %>% summary()
 ```{r visualize-var02}
 ggtsdisplay(S01_clean$Var02)
 ```
-* Variable 02 data is a little less clear but appears to have a trend and is non-stationary data
+  
+* Variable 02 data is a little less clear but appears to have a negative trend and is non-stationary data  
 * The ACF plot shows an initial large autocorrelation value that gradually decreases as the lag increases, which indicates a trend  
 * The PACF shows a significant value for lag 1.  There also appears to be some seasonality since autocorrelations increase slightly as the lag increases.    
 
 ### Differencing Variable 02 Data
-Just like we did with Variable 01, we are running the KPSS test and looking to reject the statement *Variable 02 is stationary*.  To do this the KPSS test-statistic must be larger than 0.347, which it is.  We reject the statement that Variable 02 data is stationary, which matches our previous theory.    
+Just like we did with Variable 01, we are running the KPSS test and looking to reject the statement *Variable 02 is stationary*.  To do this the KPSS test-statistic must be larger than 0.463, which it is.  We reject the statement that Variable 02 data is stationary, which matches our previous theory.    
 ```{r var02-kpss-test}
 S01_clean$Var02 %>% ur.kpss() %>% summary()
 ```
@@ -148,63 +166,66 @@ S01_clean$Var02_diff %>% ur.kpss() %>% summary()
 ```
 
 ## Splitting Data into Test & Training
+Here we will use 80% of our data as training data and will reserve 20% of our data for testing.
 ```{r split-test-train}
-#sample_index = sort(sample(nrow(S01_clean), nrow(S01_clean)*.80))
-#train <- S01_clean[sample_index,]
-#test  <- S01_clean[-sample_index,]
-train_break <- floor(nrow(S01_clean)*0.8)
+break_num <- floor(nrow(S01_clean)*0.8)
+train <- S01_clean[1:break_num,]
+test  <- S01_clean[(break_num+1):nrow(S01_clean),]
 
 ```
 ## Time Series Plots
 
 ### Auto Arima - Variable 01 Differentiated
+The first model we will test for Variable 01 is the **auto.arima** model with 1 difference and the auto lamba set to auto.  This will choose the best box.cox transformation.
 ```{r auto-arima-var-01}
-S01_ts_Var01 <- ts(select(train,Var01)[1:train_break,])
+S01_train_Var01 <- ts(select(train,Var01))
 
-fit_var01_auto <- auto.arima(S01_ts_Var01)
+fit_var01_auto <- auto.arima(S01_train_Var01,d=1,lambda="auto")
 summary(fit_var01_auto)
 ```
 
-### ETS - Variable 01 Differentiated
+
+### ETS - Variable 01 Differentiated  
+Second we will use the exponential smoothing (ETS) model.  
 ```{r ets-var01}
-fit_var01_ets <- ets(S01_ts_Var01)
+fit_var01_ets <- ets(S01_train_Var01)
 summary(fit_var01_ets)
 ```
 
+
 ### Forecast on Test Data - Variable 01
 ```{r forecast-variable01}
-test_var01 <- ts(select(test,Var01),frequency=1)
-
-forecast_auto_var01 <- fit_var01_auto %>% forecast(nrow(S01_clean) - train_break)
+forecast_auto_var01 <- fit_var01_auto %>% forecast(nrow(train))
 accuracy(forecast_auto_var01,S01_clean[1298:nrow(S01_clean),c('Var01')])
 
-forecast_ets_var01 <- fit_var01_ets %>% forecast(nrow(S01_clean) - train_break)
+forecast_ets_var01 <- fit_var01_ets %>% forecast(nrow(train))
 accuracy(forecast_ets_var01,S01_clean[1298:nrow(S01_clean),c('Var01')])
 ```
 
 ### Auto Arima - Variable 02 Differentiated
+The first model we will test for Variable 02 is the **auto.arima** model with 1 difference and the auto lamba set to auto.  This will choose the best box.cox transformation.
 ```{r  auto-arima-var-02}
-S01_ts_Var02 <- ts(select(train,Var02))
+S01_train_Var02 <- ts(select(train,Var02))
 
-fit_var02_auto <- auto.arima(S01_ts_Var02)
+fit_var02_auto <- auto.arima(S01_train_Var02,d=1,lambda="auto")
 summary(fit_var02_auto)
+
 ```
 
 ### ETS - Variable 02 Differentiated
+Second we will use the exponential smoothing (ETS) model. 
 ```{r ets-var02}
-fit_var02_ets <- ets(S01_ts_Var02)
+fit_var02_ets <- ets(S01_train_Var02)
 summary(fit_var02_ets)
 ```
 
 ### Forecast on Test Data - Variable 02
 ```{r forecast-variable02}
-test_var02 <- ts(select(test,Var02),frequency=1)
+forecast_auto_var02 <- fit_var02_auto %>% forecast(nrow(test))
+accuracy(forecast_auto_var02,S01_clean[1298:nrow(S01_clean),c('Var02')])
 
-forecast_auto_var02 <- fit_var02_auto %>% forecast(nrow(S01_clean) - train_break)
-accuracy(forecast_auto_var02,S01_clean[1298:nrow(S01_clean),c('Var01')])
-
-forecast_ets_var02 <- fit_var02_ets %>% forecast(nrow(S01_clean) - train_break)
-accuracy(forecast_ets_var02,S01_clean[1298:nrow(S01_clean),c('Var01')])
+forecast_ets_var02 <- fit_var02_ets %>% forecast(nrow(test))
+accuracy(forecast_ets_var02,S01_clean[1298:nrow(S01_clean),c('Var02')])
 ```
 
 ## Residuals of Models
@@ -216,6 +237,8 @@ checkresiduals(fit_var01_auto)
 checkresiduals(fit_var02_auto)
 ```
 ## Forecasting out 140 Variables
+Both auto.arima modeling methods produced the best models with the lowest MAPE values. For Variable 01 the model that was produce was ARIMA(0,1,1) with drift for Variable 02 the model is ARIMA(1,1,3).  
+  
 Now we will forecast out 140 periods using our selected models for Variable 01 and 02.
 ```{r var01-forecast}
 final_forecast_auto_var01 <- fit_var01_auto %>% forecast(140)
