@@ -106,14 +106,18 @@ t %>% decompose(type="multiplicative") %>%
   autoplot() + xlab("Year") +
   ggtitle("Classical multiplicative decomposition of S01 data - Variable 01")
 ```
+  
+* There appears to be an increasing trend and clear seasonality  
+  
 ```{r decomposition-Var02}
 t <- ts(S01$Var02, start = 2010, end = 2014, frequency = 365)
 t %>% decompose(type="multiplicative") %>%
   autoplot() + xlab("Year") +
   ggtitle("Classical multiplicative decomposition of S01 data - Variable 02")
 ```
-
-
+  
+* There appears to be an decreasing trend and pontential seasonality    
+  
 ## Time, ACF and PACF Plots    
 ### Variable 01  
 ```{r visualize-var01}
@@ -125,6 +129,7 @@ ggtsdisplay(S01_clean$Var01)
 * The PACF shows a single significant value for lag 1.  This means the first lag explains all of the correlation that exists in the higher lags. This implies a consistent trend
 
 ### Differencing Variable 01 Data
+#### Trend
 From our previous plots we can see a clear trend.  Let's run a Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test in order to confirm this.  This test assumes that *Variable 01 data is stationary* and we are looking to reject that statement.  In order to reject that statement, we need to see that our test-statistic is less than 0.463.  
 ```{r var01-kpss-test}
 S01_clean$Var01 %>% ur.kpss() %>% summary()
@@ -140,6 +145,13 @@ S01_clean$Var01_diff <- Var01_diff
 S01_clean$Var01_diff %>% ur.kpss() %>% summary()
 
 ```
+#### Seasonal
+To check for whether seasonal differencing is necessary we will run the function, **nsdiffs()**.  If there is seasonality in the data, the value returned will be greater than 0.64.  If it is less than 0.64, there is no seasonality.  
+```{r season-Var01}
+t <- ts(S01_clean$Var01,frequency=365)
+nsdiffs(t)
+```
+No seasonal differencing is needed since the value is equal to 0.  This is interesting since visually it looked like there was seasonality in our decomposed plot seen above.  
 
 ### Variable 02
 ```{r visualize-var02}
@@ -151,6 +163,7 @@ ggtsdisplay(S01_clean$Var02)
 * The PACF shows a significant value for lag 1.  There also appears to be some seasonality since autocorrelations increase slightly as the lag increases.    
 
 ### Differencing Variable 02 Data
+#### Trend
 Just like we did with Variable 01, we are running the KPSS test and looking to reject the statement *Variable 02 is stationary*.  To do this the KPSS test-statistic must be larger than 0.463, which it is.  We reject the statement that Variable 02 data is stationary, which matches our previous theory.    
 ```{r var02-kpss-test}
 S01_clean$Var02 %>% ur.kpss() %>% summary()
@@ -164,6 +177,14 @@ S01_clean$Var02_diff <- Var02_diff
 S01_clean$Var02_diff %>% ur.kpss() %>% summary()
 
 ```
+#### Seasonal
+To check for whether seasonal differencing is necessary we will run the function, **nsdiffs()**.  If there is seasonality in the data, the value returned will be greater than 0.64.  If it is less than 0.64, there is no seasonality.  
+
+```{r season-Var02}
+t <- ts(S01_clean$Var02,frequency=365)
+nsdiffs(t)
+```
+No seasonal differencing is needed since the value is equal to 0.
 
 ## Splitting Data into Test & Training
 Here we will use 80% of our data as training data and will reserve 20% of our data for testing.
@@ -175,17 +196,17 @@ test  <- S01_clean[(break_num+1):nrow(S01_clean),]
 ```
 ## Time Series Plots
 
-### Auto Arima - Variable 01 Differentiated
-The first model we will test for Variable 01 is the **auto.arima** model with 1 difference and the auto lamba set to auto.  This will choose the best box.cox transformation.
+### Auto Arima - Variable 01
+The first model we will test for Variable 01 is the **auto.arima** model with 1 difference.
 ```{r auto-arima-var-01}
 S01_train_Var01 <- ts(select(train,Var01))
 
-fit_var01_auto <- auto.arima(S01_train_Var01,d=1,lambda="auto")
+fit_var01_auto <- auto.arima(S01_train_Var01,d=1)
 summary(fit_var01_auto)
 ```
 
 
-### ETS - Variable 01 Differentiated  
+### ETS - Variable 01  
 Second we will use the exponential smoothing (ETS) model.  
 ```{r ets-var01}
 fit_var01_ets <- ets(S01_train_Var01)
@@ -202,12 +223,12 @@ forecast_ets_var01 <- fit_var01_ets %>% forecast(nrow(train))
 accuracy(forecast_ets_var01,S01_clean[1298:nrow(S01_clean),c('Var01')])
 ```
 
-### Auto Arima - Variable 02 Differentiated
-The first model we will test for Variable 02 is the **auto.arima** model with 1 difference and the auto lamba set to auto.  This will choose the best box.cox transformation.
+### Auto Arima - Variable 02
+The first model we will test for Variable 02 is the **auto.arima** model with 1 difference.
 ```{r  auto-arima-var-02}
 S01_train_Var02 <- ts(select(train,Var02))
 
-fit_var02_auto <- auto.arima(S01_train_Var02,d=1,lambda="auto")
+fit_var02_auto <- auto.arima(S01_train_Var02,d=1)
 summary(fit_var02_auto)
 
 ```
@@ -243,9 +264,34 @@ Now we will forecast out 140 periods using our selected models for Variable 01 a
 ```{r var01-forecast}
 final_forecast_auto_var01 <- fit_var01_auto %>% forecast(140)
 autoplot(final_forecast_auto_var01)
+
 ```
 
 ```{r var02-forecast}
 final_forecast_auto_var02 <- fit_var02_auto %>% forecast(140)
 autoplot(final_forecast_auto_var02)
+```
+
+
+```{r export-to-excel}
+
+S01_var01_prediction <- fit_var01_auto %>%
+  forecast(h=140) %>%
+  data.frame() %>%
+  select(Point.Forecast) 
+
+
+S01_var02_prediction <- fit_var02_auto %>%
+  forecast(h=140) %>%
+  data.frame() %>%
+  select(Point.Forecast) 
+
+
+
+predictions <- cbind(S01_var01_prediction,S01_var02_prediction)
+file = 'Data624_project1_so1_predictions.xlsx'
+#write.xlsx(predictions, file, sheetName = "S01", 
+#  col.names = TRUE, row.names = TRUE, append = FALSE)
+
+
 ```
